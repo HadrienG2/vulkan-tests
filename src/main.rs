@@ -340,6 +340,29 @@ fn new_logical_device<'a>(
 
 // === APPLICATION-SPECIFIC LOGIC ===
 
+// Creates a debug callback to see output from validation layers
+fn new_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
+    DebugCallback::new(
+        instance,
+        MessageTypes {
+            error: true,
+            warning: true,
+            performance_warning: true,
+            information: false,
+            debug: true,
+        },
+        |msg| {
+            println!("#{}{}{}{}{}: {} \t=> {}",
+                     if msg.ty.error { " ERRO" } else { "" },
+                     if msg.ty.warning { " WARN" } else { "" },
+                     if msg.ty.performance_warning { " PERF" } else { "" },
+                     if msg.ty.information { " INFO" } else { "" },
+                     if msg.ty.debug { " DEBG" } else { "" },
+                     msg.layer_prefix, msg.description);
+        }
+    ).expect("Failed to setup a debug callback")
+}
+
 // Tells whether we can use a certain physical device or not
 fn device_filter(dev: PhysicalDevice,
                  features: &Features,
@@ -373,7 +396,7 @@ fn device_filter(dev: PhysicalDevice,
         return false;
     }
 
-    // TODO: May end up looking at device limits as well.
+    // TODO: May end up looking at device limits and memory heap sizes as well.
 
     // If control reaches this point, we can use this device
     true
@@ -422,7 +445,7 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
     if queue_pref != Ordering::Equal { return queue_pref; }
 
     // TODO: Could also look at dedicated compute queues if we ever end
-    //       up doing compute too.
+    //       up interested in asynchronous compute.
 
     // If control reaches this point, we like both devices equally
     Ordering::Equal
@@ -444,25 +467,7 @@ fn main() {
     );
 
     // Set up debug logging
-    let _debug_callback = DebugCallback::new(
-        &instance,
-        MessageTypes {
-            error: true,
-            warning: true,
-            performance_warning: true,
-            information: false,
-            debug: true,
-        },
-        |msg| {
-            println!("#{}{}{}{}{}: {} \t=> {}",
-                     if msg.ty.error { " ERRO" } else { "" },
-                     if msg.ty.warning { " WARN" } else { "" },
-                     if msg.ty.performance_warning { " PERF" } else { "" },
-                     if msg.ty.information { " INFO" } else { "" },
-                     if msg.ty.debug { " DEBG" } else { "" },
-                     msg.layer_prefix, msg.description);
-        }
-    ).expect("Failed to setup a debug callback");
+    let _debug_callback = new_debug_callback(&instance);
 
     // Decide which device features and extensions we want to use
     let features = Features {
@@ -478,17 +483,18 @@ fn main() {
         device_preference
     );
 
-    // Find a family of graphics queues
+    // Find a family of graphics + compute queues
     //
-    // Right now, we only intend to do graphics, on a single queue, without
-    // sparse binding magic, so any graphics-capable queue family is the same by
-    // our standards. We take the first queue we find, assuming the GPU driver
-    // developer picked the queue family order wisely. We can assume that there
-    // will be such a queue because we checked for it in our device filter.
+    // Right now, we only intend to do graphics and compute, on a single queue,
+    // without sparse binding magic, so any graphics- and compute-capable queue
+    // family is the same by our standards. We take the first queue we find,
+    // assuming the GPU driver developer picked the queue family order wisely.
+    // We can assume that there will be such a queue because we checked for it
+    // in our device filter.
     //
     let graphics_family =
         phys_device.queue_families()
-                   .find(|q| q.supports_graphics())
+                   .find(|q| q.supports_graphics() && q.supports_compute())
                    .expect("This error should be handled by the device filter");
 
     // Create our logical device
