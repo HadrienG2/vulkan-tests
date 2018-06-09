@@ -408,14 +408,6 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
     };
     if type_pref != Ordering::Equal { return type_pref; }
 
-    // Device-local memory is very important for performance too
-    let has_local_mem = |dev: PhysicalDevice| {
-        dev.memory_heaps().find(|h| h.is_device_local()).is_some()
-
-    };
-    let mem_pref = has_local_mem(dev1).cmp(&has_local_mem(dev2));
-    if mem_pref != Ordering::Equal { return mem_pref; }
-
     // Dedicated data transfer queues are also useful. The more of them
     // we have the better, I think.
     let dedic_transfers = |dev: PhysicalDevice| -> usize {
