@@ -1,0 +1,7 @@
+[package]
+name = "vulkan-tests"
+version = "0.1.0"
+authors = ["Hadrien G. <knights_of_ni@gmx.com>"]
+
+[dependencies]
+vulkano = "0.9"
