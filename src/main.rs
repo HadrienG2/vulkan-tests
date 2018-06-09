@@ -373,7 +373,6 @@ fn device_filter(dev: PhysicalDevice,
         return false;
     }
 
-    // TODO: May require a compute queue later on as well.
     // TODO: May end up looking at device limits as well.
 
     // If control reaches this point, we can use this device
