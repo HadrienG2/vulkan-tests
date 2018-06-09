@@ -492,7 +492,7 @@ fn main() {
     // We can assume that there will be such a queue because we checked for it
     // in our device filter.
     //
-    let graphics_family =
+    let graphics_and_compute_family =
         phys_device.queue_families()
                    .find(|q| q.supports_graphics() && q.supports_compute())
                    .expect("This error should be handled by the device filter");
@@ -502,7 +502,7 @@ fn main() {
         phys_device,
         &features,
         &extensions,
-        [(graphics_family, 1.0)].iter().cloned()
+        [(graphics_and_compute_family, 1.0)].iter().cloned()
     );
 
     // As we only use one queue at the moment, we can use a logical shortcut
