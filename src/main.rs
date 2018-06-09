@@ -4,12 +4,22 @@ extern crate vulkano;
 use std::{
     cmp::Ordering,
     collections::HashSet,
+    mem,
     sync::Arc,
 };
 
 use vulkano::{
+    buffer::{
+        BufferUsage,
+        CpuAccessibleBuffer,
+    },
+    command_buffer::{
+        AutoCommandBufferBuilder,
+        CommandBuffer,
+    },
     device::{
         Device,
+        Queue,
         QueuesIter,
     },
     instance::{
@@ -27,7 +37,8 @@ use vulkano::{
         PhysicalDeviceType,
         QueueFamily,
         Version,
-    }
+    },
+    sync::GpuFuture,
 };
 
 
@@ -451,6 +462,52 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
     Ordering::Equal
 }
 
+// Try reading from and writing to vulkano's simplest buffer type
+fn test_buffer_read_write(device: &Arc<Device>) {
+    let buffer = CpuAccessibleBuffer::from_data(device.clone(),
+                                                BufferUsage::all(),
+                                                42usize)
+                                     .expect("Failed to create buffer");
+    let mut writer = buffer.write().expect("Buffer should be unlocked");
+    assert_eq!(*writer, 42usize);
+    *writer = 43;
+    mem::drop(writer);
+    let reader = buffer.read().expect("Buffer should be unlocked");
+    assert_eq!(*reader, 43);
+}
+
+// Try it again, but this time make the GPU perform the memory copy
+fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) {
+    // Build a source and destination buffer
+    let source = CpuAccessibleBuffer::from_iter(device.clone(),
+                                                BufferUsage::transfer_source(),
+                                                1..42)
+                                     .expect("Failed to create source buffer");
+    let dest =
+        CpuAccessibleBuffer::from_iter(device.clone(),
+                                       BufferUsage::transfer_destination(),
+                                       (1..42).map(|_| 0))
+                            .expect("Failed to create destination buffer");
+
+    // Tell the GPU to eagerly copy from the source to the destination
+    let command_buffer =
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())
+                                 .expect("Failed to start a command buffer")
+                                 .copy_buffer(source.clone(), dest.clone())
+                                 .expect("Failed to enqueue a buffer copy")
+                                 .build()
+                                 .expect("Failed to build the command buffer");
+    let future = command_buffer.execute(queue.clone())
+                               .expect("Failed to submit command to driver");
+    future.then_signal_fence_and_flush().expect("Failed to flush the future")
+          .wait(None).expect("Failed to await the copy");
+
+    // Check that the copy was performed correctly
+    let source_data = source.read().expect("Source buffer should be unlocked");
+    let dest_data = dest.read().expect("Dest buffer should be unlocked");
+    assert_eq!(*source_data, *dest_data, "Source and dest should now be equal");
+}
+
 // Application entry point
 fn main() {
     // This is a Vulkan test program
@@ -506,9 +563,11 @@ fn main() {
     );
 
     // As we only use one queue at the moment, we can use a logical shortcut
-    let queue = queues_iter.next();
+    let queue = queues_iter.next().expect("Vulkan failed to provide a queue");
     assert!(queues_iter.next().is_none(),
             "This code must be updated, it assumes there is only one queue");
 
-    // TODO: Explorer buffers
+    // Let's play a bit with vulkano's buffer abstraction
+    test_buffer_read_write(&device);
+    test_buffer_copy(&device, &queue);
 }
