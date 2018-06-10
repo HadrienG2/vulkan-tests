@@ -1,5 +1,7 @@
 #[macro_use]
 extern crate vulkano;
+#[macro_use]
+extern crate vulkano_shader_derive;
 
 use std::{
     cmp::Ordering,
@@ -17,6 +19,7 @@ use vulkano::{
         AutoCommandBufferBuilder,
         CommandBuffer,
     },
+    descriptor::descriptor_set::PersistentDescriptorSet,
     device::{
         Device,
         Queue,
@@ -38,6 +41,7 @@ use vulkano::{
         QueueFamily,
         Version,
     },
+    pipeline::ComputePipeline,
     sync::GpuFuture,
 };
 
@@ -508,6 +512,83 @@ fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) {
     assert_eq!(*source_data, *dest_data, "Source and dest should now be equal");
 }
 
+// Do a computation on a buffer using a compute pipeline
+fn test_compute_buffer(device: &Arc<Device>, queue: &Arc<Queue>) {
+    // Here is some data
+    let data_buffer = CpuAccessibleBuffer::from_iter(device.clone(),
+                                                     BufferUsage::all(), // TODO: Be more specific!
+                                                     0..65536)
+                                          .expect("Failed to create buffer");
+
+    // We will process this data using the following compute shader
+    #[allow(unused)]
+    mod cs {
+        #[derive(VulkanoShader)]
+        #[ty = "compute"]
+        #[src = "
+#version 460
+
+layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;
+
+layout(set = 0, binding = 0) buffer Data {
+    uint data[];
+} buf;
+
+void main() {
+    uint idx = gl_GlobalInvocationID.x;
+    buf.data[idx] *= 42;
+}
+        "]
+        struct Dummy;
+    }
+
+    // Load the shader into the Vulkan implementation
+    let shader = cs::Shader::load(device.clone())
+                            .expect("Failed to load shader module");
+
+    // Set up a compute pipeline containing that shader
+    let pipeline =
+        Arc::new(ComputePipeline::new(device.clone(),
+                                      &shader.main_entry_point(),
+                                      &())
+                                 .expect("Failed to create compute pipeline"));
+
+    // Build a descriptor set to attach that pipeline to our buffer
+    let descriptor_set = Arc::new(
+        PersistentDescriptorSet::start(pipeline.clone(), 0)
+                                .add_buffer(data_buffer.clone())
+                                .expect("Failed to add buffer to descriptors")
+                                .build()
+                                .expect("Failed to build descriptor set")
+    );
+
+    // Build a command buffer that runs the computation
+    let command_buffer =
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())
+                                 .expect("Failed to start a command buffer")
+                                 .dispatch([1024, 1, 1],
+                                           pipeline.clone(),
+                                           descriptor_set.clone(),
+                                           ())
+                                 .expect("Failed to add dispatch command")
+                                 .build()
+                                 .expect("Failed to build command buffer");
+
+    // Schedule the computation and wait for it
+    command_buffer.execute(queue.clone())
+                  .expect("Failed to submit command buffer to driver")
+                  .then_signal_fence_and_flush()
+                  .expect("Failed to flush the future")
+                  .wait(None)
+                  .expect("Failed to await the computation");
+
+    // Check that it worked
+    let content = data_buffer.read().expect("Failed to access buffer");
+    for (n, val) in content.iter().enumerate() {
+        assert_eq!(*val, (n as u32) * 42);
+    }
+}
+
 // Application entry point
 fn main() {
     // This is a Vulkan test program
@@ -570,4 +651,7 @@ fn main() {
     // Let's play a bit with vulkano's buffer abstraction
     test_buffer_read_write(&device);
     test_buffer_copy(&device, &queue);
+
+    // And now, let's play with compute shaders
+    test_compute_buffer(&device, &queue);
 }
