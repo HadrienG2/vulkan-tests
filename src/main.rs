@@ -515,10 +515,14 @@ fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) {
 // Do a computation on a buffer using a compute pipeline
 fn test_compute_buffer(device: &Arc<Device>, queue: &Arc<Queue>) {
     // Here is some data
-    let data_buffer = CpuAccessibleBuffer::from_iter(device.clone(),
-                                                     BufferUsage::all(), // TODO: Be more specific!
-                                                     0..65536)
-                                          .expect("Failed to create buffer");
+    let data_buffer =
+        CpuAccessibleBuffer::from_iter(device.clone(),
+                                       BufferUsage {
+                                           storage_buffer: true,
+                                           .. BufferUsage::none()
+                                       }, // TODO: Be more specific!
+                                       0..65536)
+                            .expect("Failed to create buffer");
 
     // We will process this data using the following compute shader
     #[allow(unused)]
