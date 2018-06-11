@@ -6,3 +6,8 @@ authors = ["Hadrien G. <knights_of_ni@gmx.com>"]
 [dependencies]
 vulkano = "0.9"
 vulkano-shader-derive = "0.9"
+
+[dependencies.image]
+version = "0.19"
+default-features = false
+features = ["png_codec"]

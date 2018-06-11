@@ -1,7 +1,13 @@
+extern crate image;
 #[macro_use]
 extern crate vulkano;
 #[macro_use]
 extern crate vulkano_shader_derive;
+
+use image::{
+    ImageBuffer,
+    Rgba,
+};
 
 use std::{
     cmp::Ordering,
@@ -651,7 +657,6 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
                                  .expect("Failed to build command buffer");
 
     // Execute and await the command buffer
-    // TODO: Validation layer is not happy about this, figure out why
     command_buffer.execute(queue.clone())
                   .expect("Failed to submit the command buffer")
                   .then_signal_fence_and_flush()
@@ -659,8 +664,15 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
                   .wait(None)
                   .expect("Failed to await the computation");
 
-    // TODO: Save image to a file, maybe call it "purple haze"
-    unimplemented!()
+    // Extract the image data from the buffer where it's been copied
+    let buf_content = buf.read().expect("Failed to read buffer");
+    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
+                                                     1024,
+                                                     &buf_content[..])
+                                           .expect("Failed to decode image");
+
+    // Save the image to a PNG file
+    image.save("deep_purple.png").expect("Failed to save image");
 }
 
 // Application entry point
