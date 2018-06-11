@@ -25,6 +25,15 @@ use vulkano::{
         Queue,
         QueuesIter,
     },
+    format::{
+        ClearValue,
+        Format,
+    },
+    image::{
+        Dimensions,
+        ImageUsage,
+        StorageImage,
+    },
     instance::{
         self,
         debug::{
@@ -596,6 +605,59 @@ void main() {
     }
 }
 
+// Let's perform some basic operations with an image
+fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
+    // Create an image
+    let image = StorageImage::with_usage(device.clone(),
+                                         Dimensions::Dim2d { width: 1024,
+                                                             height: 1024 },
+                                         Format::R8G8B8A8Unorm,
+                                         ImageUsage {
+                                            transfer_source: true,
+                                            transfer_destination: true,
+                                            storage: true,
+                                            .. ImageUsage::none()
+                                         },
+                                         Some(queue.family()))
+                             .expect("Failed to create image");
+
+    // Create a buffer to copy the final image contents in
+    let buf = CpuAccessibleBuffer::from_iter(device.clone(),
+                                             BufferUsage {
+                                                transfer_destination: true,
+                                                .. BufferUsage::none()
+                                             },
+                                             (0 .. 1024 * 1024 *4).map(|_| 0u8))
+                                  .expect("Failed to create dest buffer");
+
+    // Ask the GPU to fill the image with purple
+    let command_buffer =
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())
+                                 .expect("Failed to start a command buffer")
+                                 .clear_color_image(
+                                    image.clone(),
+                                    ClearValue::Float([1.0, 0.0, 1.0, 1.0])
+                                 )
+                                 .expect("Failed to add clear command")
+                                 .copy_image_to_buffer(image.clone(),
+                                                       buf.clone())
+                                 .expect("Failed to add copy command")
+                                 .build()
+                                 .expect("Failed to build command buffer");
+
+    // Execute and await the command buffer
+    // TODO: Validation layer is not happy about this, figure out why
+    command_buffer.execute(queue.clone())
+                  .expect("Failed to submit the command buffer")
+                  .then_signal_fence_and_flush()
+                  .expect("Failed to flush the future")
+                  .wait(None)
+                  .expect("Failed to await the computation");
+
+    // TODO: Save image to a file, maybe call it "purple haze"
+    unimplemented!()
+}
+
 // Application entry point
 fn main() {
     // This is a Vulkan test program
@@ -659,4 +721,7 @@ fn main() {
     test_buffer_read_write(&device);
     test_buffer_copy(&device, &queue);
     test_buffer_compute(&device, &queue);
+
+    // And then let's play with the image abstraction too!
+    test_image_basics(&device, &queue);
 }
