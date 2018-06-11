@@ -65,7 +65,7 @@ fn create_instance(application_info: Option<&ApplicationInfo>,
                    extensions: &InstanceExtensions,
                    layers: &[&str]) -> Arc<Instance> {
     // Display the application info
-    println!("Application info: {:?}\n", application_info);
+    println!("\nApplication info: {:?}\n", application_info);
 
     // Enumerate and display available instance extensions
     let supported_instance_exts =
@@ -661,9 +661,10 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
 // Application entry point
 fn main() {
     // This is a Vulkan test program
-    println!("Hello and welcome to this Vulkan test program!\n");
+    println!("Hello and welcome to this Vulkan test program!");
 
     // Create our Vulkan instance
+    println!("Setting up instance...");
     let instance = create_instance(
         Some(&app_info_from_cargo_toml!()),
         &InstanceExtensions {
@@ -674,6 +675,7 @@ fn main() {
     );
 
     // Set up debug logging
+    println!("Setting up debug logging...");
     let _debug_callback = new_debug_callback(&instance);
 
     // Decide which device features and extensions we want to use
@@ -684,6 +686,7 @@ fn main() {
     let extensions = DeviceExtensions::none();
 
     // Select our physical device accordingly
+    println!("\nSelecting physical device...\n");
     let phys_device = select_physical_device(
         &instance,
         |dev| device_filter(dev, &features, &extensions),
@@ -705,6 +708,7 @@ fn main() {
                    .expect("This error should be handled by the device filter");
 
     // Create our logical device
+    println!("\nSetting up logical device...");
     let (device, mut queues_iter) = new_logical_device(
         phys_device,
         &features,
@@ -718,10 +722,12 @@ fn main() {
             "This code must be updated, it assumes there is only one queue");
 
     // Let's play a bit with vulkano's buffer abstraction
+    println!("Playing with command buffers...");
     test_buffer_read_write(&device);
     test_buffer_copy(&device, &queue);
     test_buffer_compute(&device, &queue);
 
     // And then let's play with the image abstraction too!
+    println!("Playing with images...");
     test_image_basics(&device, &queue);
 }
