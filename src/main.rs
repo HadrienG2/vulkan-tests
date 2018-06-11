@@ -376,7 +376,7 @@ fn new_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
             debug: true,
         },
         |msg| {
-            println!("#{}{}{}{}{}: {} \t=> {}",
+            println!("#{}{}{}{}{} @ {} \t=> {}",
                      if msg.ty.error { " ERRO" } else { "" },
                      if msg.ty.warning { " WARN" } else { "" },
                      if msg.ty.performance_warning { " PERF" } else { "" },
@@ -620,6 +620,11 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
                                          },
                                          Some(queue.family()))
                              .expect("Failed to create image");
+
+    // HACK: Vulkano messes up its view of the initial image layout, and we need
+    //       to help it at the task of getting it right.
+    use vulkano::image::traits::ImageAccess;
+    let image = unsafe { image.forced_undefined_initial_layout(false) };
 
     // Create a buffer to copy the final image contents in
     let buf = CpuAccessibleBuffer::from_iter(device.clone(),
