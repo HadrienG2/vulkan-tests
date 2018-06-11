@@ -468,10 +468,13 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
 
 // Try reading from and writing to vulkano's simplest buffer type
 fn test_buffer_read_write(device: &Arc<Device>) {
+    // This is a basic buffer type that can contain anything
     let buffer = CpuAccessibleBuffer::from_data(device.clone(),
                                                 BufferUsage::all(),
                                                 42usize)
                                      .expect("Failed to create buffer");
+
+    // We can access it with RWLock-like semantics
     let mut writer = buffer.write().expect("Buffer should be unlocked");
     assert_eq!(*writer, 42usize);
     *writer = 43;
@@ -513,14 +516,14 @@ fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) {
 }
 
 // Do a computation on a buffer using a compute pipeline
-fn test_compute_buffer(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_buffer_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
     // Here is some data
     let data_buffer =
         CpuAccessibleBuffer::from_iter(device.clone(),
                                        BufferUsage {
                                            storage_buffer: true,
                                            .. BufferUsage::none()
-                                       }, // TODO: Be more specific!
+                                       },
                                        0..65536)
                             .expect("Failed to create buffer");
 
@@ -655,7 +658,5 @@ fn main() {
     // Let's play a bit with vulkano's buffer abstraction
     test_buffer_read_write(&device);
     test_buffer_copy(&device, &queue);
-
-    // And now, let's play with compute shaders
-    test_compute_buffer(&device, &queue);
+    test_buffer_compute(&device, &queue);
 }
