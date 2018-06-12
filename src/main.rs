@@ -65,6 +65,8 @@ use vulkano::{
 
 // TODO: Make the debug output conditional and isolated
 // TODO: Manage errors more carefully
+// TODO: Review device selection in light of new program requirements
+// TODO: Split this code up in multiple modules
 
 // Create an instance of a Vulkan context, with lots of debug printout
 fn create_instance(application_info: Option<&ApplicationInfo>,
