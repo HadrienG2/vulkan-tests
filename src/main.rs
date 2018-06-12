@@ -647,7 +647,7 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
                                  .expect("Failed to start a command buffer")
                                  .clear_color_image(
                                     image.clone(),
-                                    ClearValue::Float([1.0, 0.0, 1.0, 1.0])
+                                    ClearValue::Float([0.5, 0.0, 0.5, 1.0])
                                  )
                                  .expect("Failed to add clear command")
                                  .copy_image_to_buffer(image.clone(),
