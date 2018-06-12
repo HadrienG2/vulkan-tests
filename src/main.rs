@@ -675,6 +675,127 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
     image.save("deep_purple.png").expect("Failed to save image");
 }
 
+// And now, let's comput an image using a compute shader
+fn test_image_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
+    // This is the image which we will eventually write into
+    let image = StorageImage::with_usage(device.clone(),
+                                         Dimensions::Dim2d { width: 1024,
+                                                             height: 1024 },
+                                         Format::R8G8B8A8Unorm,
+                                         ImageUsage {
+                                            transfer_source: true,
+                                            storage: true,
+                                            .. ImageUsage::none()
+                                         },
+                                         Some(queue.family()))
+                             .expect("Failed to create image");
+
+    // We will generate this image using the following compute shader
+    #[allow(unused)]
+    mod cs {
+        #[derive(VulkanoShader)]
+        #[ty = "compute"]
+        #[src = "
+#version 460
+
+layout(local_size_x = 8, local_size_y = 8, local_size_z = 1) in;
+
+layout(set = 0, binding = 0, rgba8) uniform writeonly image2D img;
+
+void main() {
+    vec2 norm_coordinates = (gl_GlobalInvocationID.xy + vec2(0.5)) / vec2(imageSize(img));
+    vec2 c = (norm_coordinates - vec2(0.5)) * 2.0 - vec2(1.0, 0.0);
+
+    vec2 z = vec2(0.0, 0.0);
+    float i;
+    for (i = 0.0; i < 1.0; i += 0.005) {
+        z = vec2(
+            z.x * z.x - z.y * z.y + c.x,
+            z.y * z.x + z.x * z.y + c.y
+        );
+
+        if (length(z) > 4.0) {
+            break;
+        }
+    }
+
+    vec4 to_write = vec4(0.0, i, 0.0, 1.0);
+    imageStore(img, ivec2(gl_GlobalInvocationID.xy), to_write);
+}
+
+        "]
+        struct Dummy;
+    }
+
+    // Load the shader into the Vulkan implementation
+    let shader = cs::Shader::load(device.clone())
+                            .expect("Failed to load shader module");
+
+    // Set up a compute pipeline containing that shader
+    let pipeline =
+        Arc::new(ComputePipeline::new(device.clone(),
+                                      &shader.main_entry_point(),
+                                      &())
+                                 .expect("Failed to create compute pipeline"));
+
+    // Build a descriptor set to attach that pipeline to our buffer
+    let descriptor_set = Arc::new(
+        PersistentDescriptorSet::start(pipeline.clone(), 0)
+                                .add_image(image.clone())
+                                .expect("Failed to add image to descriptors")
+                                .build()
+                                .expect("Failed to build descriptor set")
+    );
+
+    // Create a buffer to copy the final image contents in
+    let buf = CpuAccessibleBuffer::from_iter(device.clone(),
+                                             BufferUsage {
+                                                transfer_destination: true,
+                                                .. BufferUsage::none()
+                                             },
+                                             (0 .. 1024 * 1024 *4).map(|_| 0u8))
+                                  .expect("Failed to create dest buffer");
+
+    // Build a command buffer that runs the computation
+    //
+    // HACK: Vulkano again gets the initial image layout wrong, but this time we
+    //       can't use the same hack as before because for some reaon it breaks
+    //       the SafeDeref guarantee which other vulkano functions need. So
+    //       let's just send the bad layout to the driver and see what happens.
+    //
+    let command_buffer =
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())
+                                 .expect("Failed to start a command buffer")
+                                 .dispatch([1024 / 8, 1024 / 8, 1],
+                                           pipeline.clone(),
+                                           descriptor_set.clone(),
+                                           ())
+                                 .expect("Failed to add dispatch command")
+                                 .copy_image_to_buffer(image.clone(),
+                                                       buf.clone())
+                                 .expect("Failed to add image copy")
+                                 .build()
+                                 .expect("Failed to build command buffer");
+
+    // Schedule the computation and wait for it
+    command_buffer.execute(queue.clone())
+                  .expect("Failed to submit command buffer to driver")
+                  .then_signal_fence_and_flush()
+                  .expect("Failed to flush the future")
+                  .wait(None)
+                  .expect("Failed to await the computation");
+
+    // Extract the image data from the buffer where it's been copied
+    let buf_content = buf.read().expect("Failed to read buffer");
+    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
+                                                     1024,
+                                                     &buf_content[..])
+                                           .expect("Failed to decode image");
+
+    // Save the image to a PNG file
+    image.save("mandelbrot.png").expect("Failed to save image");
+}
+
 // Application entry point
 fn main() {
     // This is a Vulkan test program
@@ -747,4 +868,5 @@ fn main() {
     // And then let's play with the image abstraction too!
     println!("Playing with images...");
     test_image_basics(&device, &queue);
+    test_image_compute(&device, &queue);
 }
