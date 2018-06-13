@@ -616,23 +616,19 @@ void main() {
 // Let's perform some basic operations with an image
 fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
     // Create an image
-    let image = StorageImage::with_usage(device.clone(),
-                                         Dimensions::Dim2d { width: 1024,
-                                                             height: 1024 },
-                                         Format::R8G8B8A8Unorm,
-                                         ImageUsage {
-                                            transfer_source: true,
-                                            transfer_destination: true,
-                                            storage: true,
-                                            .. ImageUsage::none()
-                                         },
-                                         Some(queue.family()))
-                             .expect("Failed to create image");
-
-    // HACK: Vulkano messes up its view of the initial image layout, and we need
-    //       to help it at the task of getting it right.
-    use vulkano::image::traits::ImageAccess;
-    let image = unsafe { image.forced_undefined_initial_layout(false) };
+    let (image, init) =
+        StorageImage::uninitialized(device.clone(),
+                                    Dimensions::Dim2d { width: 1024,
+                                                        height: 1024 },
+                                    Format::R8G8B8A8Unorm,
+                                    ImageUsage {
+                                       transfer_source: true,
+                                       transfer_destination: true,
+                                       storage: true,
+                                       .. ImageUsage::none()
+                                    },
+                                    Some(queue.family()))
+                     .expect("Failed to create image");
 
     // Create a buffer to copy the final image contents in
     let buf = CpuAccessibleBuffer::from_iter(device.clone(),
@@ -648,7 +644,7 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
         AutoCommandBufferBuilder::new(device.clone(), queue.family())
                                  .expect("Failed to start a command buffer")
                                  .clear_color_image(
-                                    image.clone(),
+                                    init,
                                     ClearValue::Float([0.5, 0.0, 0.5, 1.0])
                                  )
                                  .expect("Failed to add clear command")
@@ -680,17 +676,36 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
 // And now, let's comput an image using a compute shader
 fn test_image_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
     // This is the image which we will eventually write into
-    let image = StorageImage::with_usage(device.clone(),
-                                         Dimensions::Dim2d { width: 1024,
-                                                             height: 1024 },
-                                         Format::R8G8B8A8Unorm,
-                                         ImageUsage {
-                                            transfer_source: true,
-                                            storage: true,
-                                            .. ImageUsage::none()
-                                         },
-                                         Some(queue.family()))
-                             .expect("Failed to create image");
+    let (image, init) =
+        StorageImage::uninitialized(device.clone(),
+                                    Dimensions::Dim2d { width: 1024,
+                                                        height: 1024 },
+                                    Format::R8G8B8A8Unorm,
+                                    ImageUsage {
+                                       transfer_source: true,
+                                       transfer_destination: true,
+                                       storage: true,
+                                       .. ImageUsage::none()
+                                    },
+                                    Some(queue.family()))
+                     .expect("Failed to create image");
+
+    // Build a command buffer that clears the image
+    let command_buffer =
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())
+                                 .expect("Failed to start a command buffer")
+                                 .clear_color_image(
+                                    init,
+                                    ClearValue::Float([0.0, 0.0, 0.0, 1.0])
+                                 )
+                                 .expect("Failed to add clear command")
+                                 .build()
+                                 .expect("Failed to build command buffer");
+
+    // Start running the clear command
+    let clear_finished =
+        command_buffer.execute(queue.clone())
+                      .expect("Failed to submit command buffer to driver");
 
     // We will generate this image using the following compute shader
     #[allow(unused)]
@@ -759,12 +774,6 @@ void main() {
                                   .expect("Failed to create dest buffer");
 
     // Build a command buffer that runs the computation
-    //
-    // HACK: Vulkano again gets the initial image layout wrong, but this time we
-    //       can't use the same hack as before because for some reaon it breaks
-    //       the SafeDeref guarantee which other vulkano functions need. So
-    //       let's just send the bad layout to the driver and see what happens.
-    //
     let command_buffer =
         AutoCommandBufferBuilder::new(device.clone(), queue.family())
                                  .expect("Failed to start a command buffer")
@@ -780,7 +789,7 @@ void main() {
                                  .expect("Failed to build command buffer");
 
     // Schedule the computation and wait for it
-    command_buffer.execute(queue.clone())
+    command_buffer.execute_after(clear_finished, queue.clone())
                   .expect("Failed to submit command buffer to driver")
                   .then_signal_fence_and_flush()
                   .expect("Failed to flush the future")
