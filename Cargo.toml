@@ -4,6 +4,8 @@ version = "0.1.0"
 authors = ["Hadrien G. <knights_of_ni@gmx.com>"]
 
 [dependencies]
+env_logger = "0.5"
+log = "0.4"
 vulkano = { path = "../vulkano/vulkano" }
 vulkano-shader-derive = "0.9"
 
