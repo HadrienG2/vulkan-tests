@@ -3,7 +3,10 @@
 #[macro_use] extern crate vulkano_shader_derive;
 
 extern crate env_logger;
+extern crate failure;
 extern crate image;
+
+use failure::Error;
 
 use image::{
     ImageBuffer,
@@ -14,7 +17,6 @@ use log::Level;
 
 use std::{
     cmp::Ordering,
-    collections::HashSet,
     fmt::Write,
     mem,
     sync::Arc,
@@ -77,50 +79,36 @@ use vulkano::{
 
 // === GENERAL-PURPOSE LOGIC (+ DEBUG PRINTOUT) ===
 
-// TODO: Make the debug output conditional and isolated
 // TODO: Manage errors more carefully
 // TODO: Review device selection in light of new program requirements
 // TODO: Split this code up in multiple modules
 
-// Create an instance of a Vulkan context, with lots of debug printout
+// Create an instance of a Vulkan context, with optional debug printout
 fn create_instance(application_info: Option<&ApplicationInfo>,
                    extensions: &InstanceExtensions,
-                   layers: &[&str]) -> Arc<Instance> {
-    // Display the application info
-    info!("Application info: {:?}", application_info);
+                   layers: &[&str]) -> Result<Arc<Instance>, Error> {
+    // Display detailed diagnostics information, if requested.
+    if log_enabled!(Level::Info) {
+        // Display the application info
+        info!("Application info: {:?}", application_info);
 
-    // Enumerate and display available instance extensions
-    let supported_instance_exts =
-        InstanceExtensions::supported_by_core()
-                           .expect("Failed to load Vulkan loader");
-    info!("Supported instance extensions: {:?}", supported_instance_exts);
+        // Display available instance extensions
+        let supported_exts = InstanceExtensions::supported_by_core()?;
+        info!("Supported instance extensions: {:?}", supported_exts);
 
-    // Make sure that the Vulkan implementation supports all required extensions
-    assert_eq!(extensions.difference(&supported_instance_exts),
-               InstanceExtensions::none());
-
-    // Enumerate and display available instance layers
-    info!("Available instance layers:");
-    let mut available_instance_layers = HashSet::new();
-    for layer in instance::layers_list()
-                          .expect("Failed to load Vulkan lib")
-    {
-        info!("    - {} ({}) [Version {}, targeting Vulkan v{}]",
-              layer.name(),
-              layer.description(),
-              layer.implementation_version(),
-              layer.vulkan_version());
-        available_instance_layers.insert(layer.name().to_owned());
-    }
-
-    // Make sure that the Vulkan implementation supports all requested layers
-    for layer in layers {
-        assert!(available_instance_layers.contains(*layer));
+        // Display available instance layers
+        info!("Available instance layers:");
+        for layer in instance::layers_list()? {
+            info!("    - {} ({}) [Version {}, targeting Vulkan v{}]",
+                  layer.name(),
+                  layer.description(),
+                  layer.implementation_version(),
+                  layer.vulkan_version());
+        }
     }
 
     // Create our instance
-    Instance::new(application_info, extensions, layers)
-             .expect("Failed to create instance")
+    Ok(Instance::new(application_info, extensions, layers)?)
 }
 
 // Select a single physical device, with lots of debug printout
@@ -1049,7 +1037,7 @@ void main() {
 }
 
 // Application entry point
-fn main() {
+fn main() -> Result<(), Error> {
     // Initialize logging
     env_logger::init();
 
@@ -1065,7 +1053,7 @@ fn main() {
             .. InstanceExtensions::none()
         },
         &["VK_LAYER_LUNARG_standard_validation"]
-    );
+    )?;
 
     // Set up debug logging
     println!("* Setting up debug logging...");
@@ -1129,4 +1117,8 @@ fn main() {
     // drawing a colored triangle. Everything goes downhill from there.
     println!("* And finally, drawing a triangle...");
     test_triangle(&device, &queue);
+
+    // ...and then everything will be teared down automagically
+    println!("We're done!");
+    Ok(())
 }
