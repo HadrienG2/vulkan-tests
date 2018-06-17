@@ -6,8 +6,6 @@
 extern crate env_logger;
 extern crate image;
 
-use failure::Error;
-
 use image::{
     ImageBuffer,
     Rgba,
@@ -36,7 +34,6 @@ use vulkano::{
     device::{
         Device,
         Queue,
-        QueuesIter,
     },
     format::{
         ClearValue,
@@ -65,7 +62,6 @@ use vulkano::{
         InstanceExtensions,
         PhysicalDevice,
         PhysicalDeviceType,
-        QueueFamily,
         Version,
     },
     pipeline::{
@@ -83,6 +79,9 @@ use vulkano::{
 // TODO: Review device selection in light of new program requirements
 // TODO: Split this code up in multiple modules
 
+/// We use failure's type-erased error handling
+type Result<T> = std::result::Result<T, failure::Error>;
+
 /// Create an instance of a Vulkan context
 ///
 /// This is basically a thin wrapper around vulkano's Instance::new() which
@@ -90,7 +89,7 @@ use vulkano::{
 ///
 fn create_instance(application_info: Option<&ApplicationInfo>,
                    extensions: &InstanceExtensions,
-                   layers: &[&str]) -> Result<Arc<Instance>, Error> {
+                   layers: &[&str]) -> Result<Arc<Instance>> {
     // Display detailed diagnostics information, if requested.
     if log_enabled!(Level::Info) {
         // Display the application info
@@ -120,7 +119,7 @@ fn select_physical_device(
     instance: &Arc<Instance>,
     filter: impl Fn(PhysicalDevice) -> bool,
     preference: impl Fn(PhysicalDevice, PhysicalDevice) -> Ordering
-) -> Result<PhysicalDevice, Error> {
+) -> Result<PhysicalDevice> {
         // Enumerate the physical devices
     info!("---- BEGINNING OF PHYSICAL DEVICE LIST ----");
     let mut favorite_device = None;
@@ -370,36 +369,13 @@ fn select_physical_device(
     favorite_device.ok_or(failure::err_msg("No suitable physical device found"))
 }
 
-// Set up a logical device from a physical device
-fn new_logical_device<'a>(
-    dev: PhysicalDevice,
-    features: &Features,
-    extensions: &DeviceExtensions,
-    queues: impl IntoIterator<Item=(QueueFamily<'a>, f32)>
-) -> (Arc<Device>, QueuesIter) {
-    // Check that requested features are supported
-    assert!(dev.supported_features().superset_of(features),
-            "Some requested features are not supported by the physical device");
-
-    // Check that requested extensions are supported
-    assert_eq!(
-        extensions.difference(&DeviceExtensions::supported_by_device(dev)),
-        DeviceExtensions::none(),
-        "Some requested extensions are not supported by the physical device"
-    );
-
-    // We'll leave the queue family check to Vulkano
-    Device::new(dev, features, extensions, queues)
-           .expect("Failed to create a logical device")
-}
-
 
 // === APPLICATION-SPECIFIC LOGIC ===
 
 // Creates a debug callback to see output from validation layers
-fn new_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
+fn new_debug_callback(instance: &Arc<Instance>) -> Result<DebugCallback> {
     let max_log_level = log::max_level();
-    DebugCallback::new(
+    Ok(DebugCallback::new(
         instance,
         MessageTypes {
             error: (max_log_level >= log::LevelFilter::Error),
@@ -426,7 +402,7 @@ fn new_debug_callback(instance: &Arc<Instance>) -> DebugCallback {
                  if msg.ty.debug { " DEBG" } else { "" },
                  msg.layer_prefix, msg.description);
         }
-    ).expect("Failed to setup a debug callback")
+    )?)
 }
 
 // Tells whether we can use a certain physical device or not
@@ -1024,7 +1000,7 @@ void main() {
 }
 
 // Application entry point
-fn main() -> Result<(), Error> {
+fn main() -> Result<()> {
     // Initialize logging
     env_logger::init();
 
@@ -1044,7 +1020,7 @@ fn main() -> Result<(), Error> {
 
     // Set up debug logging
     println!("* Setting up debug logging...");
-    let _debug_callback = new_debug_callback(&instance);
+    let _debug_callback = new_debug_callback(&instance)?;
 
     // Decide which device features and extensions we want to use
     let features = Features {
@@ -1077,12 +1053,12 @@ fn main() -> Result<(), Error> {
 
     // Create our logical device
     println!("* Setting up logical device and queue...");
-    let (device, mut queues_iter) = new_logical_device(
+    let (device, mut queues_iter) = Device::new(
         phys_device,
         &features,
         &extensions,
         [(graphics_and_compute_family, 1.0)].iter().cloned()
-    );
+    )?;
 
     // As we only use one queue at the moment, we can use a logical shortcut
     let queue = queues_iter.next().expect("Vulkan failed to provide a queue");
