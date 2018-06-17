@@ -56,6 +56,7 @@ use vulkano::{
         InstanceExtensions,
         PhysicalDevice,
         PhysicalDeviceType,
+        QueueFamily,
         Version,
     },
     pipeline::{
@@ -70,6 +71,8 @@ use vulkano::{
 // TODO: Review device selection in light of new program requirements
 // TODO: Split this code up in multiple modules
 
+// === DEVICE AND QUEUE SELECTION CRITERIA ===
+
 // Tells whether we can use a certain physical device or not
 fn device_filter(dev: PhysicalDevice,
                  features: &Features,
@@ -82,12 +85,8 @@ fn device_filter(dev: PhysicalDevice,
         return false;
     }
 
-    // For this learning exercise, we want at least a hybrid graphics + compute
-    // queue (this implies data transfer support)
-    if dev.queue_families()
-          .find(|f| f.supports_graphics() && f.supports_compute())
-          .is_none()
-    {
+    // At least one device queue family should fit our needs
+    if dev.queue_families().find(queue_filter).is_none() {
         return false;
     }
 
@@ -96,7 +95,7 @@ fn device_filter(dev: PhysicalDevice,
         return false;
     }
 
-    // Same goes for extensions
+    // Same goes for device extensions
     let unsupported_exts =
         extensions.difference(&DeviceExtensions::supported_by_device(dev));
     if unsupported_exts != DeviceExtensions::none() {
@@ -107,6 +106,13 @@ fn device_filter(dev: PhysicalDevice,
 
     // If control reaches this point, we can use this device
     true
+}
+
+// Tells whether we can use a certain queue family or not
+fn queue_filter(family: &QueueFamily) -> bool {
+    // For this learning exercise, we want at least a hybrid graphics + compute
+    // queue (this implies data transfer support)
+    family.supports_graphics() && family.supports_compute()
 }
 
 // Tells how acceptable device "dev1" compares to alternative "dev2"
@@ -138,25 +144,31 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
     };
     if type_pref != Ordering::Equal { return type_pref; }
 
-    // Dedicated data transfer queues are also useful. The more of them
-    // we have the better, I think.
-    let dedic_transfers = |dev: PhysicalDevice| -> usize {
+    // Figure out which queue family we would pick on each device
+    fn target_family(dev: PhysicalDevice) -> QueueFamily {
         dev.queue_families()
-           .filter(|q| q.supports_transfers() &&
-                       !(q.supports_graphics() || q.supports_compute()))
-           .map(|q| q.queues_count())
-           .sum()
-
-    };
-    let queue_pref = dedic_transfers(dev1).cmp(&dedic_transfers(dev2));
+           .filter(queue_filter)
+           .max_by(queue_preference)
+           .expect("Device filtering failed")
+    }
+    let (fam1, fam2) = (target_family(dev1), target_family(dev2));
+    let queue_pref = queue_preference(&fam1, &fam2);
     if queue_pref != Ordering::Equal { return queue_pref; }
-
-    // TODO: Could also look at dedicated compute queues if we ever end
-    //       up interested in asynchronous compute.
 
     // If control reaches this point, we like both devices equally
     Ordering::Equal
 }
+
+// Tells whether we like a certain queue family or not
+fn queue_preference(_fam1: &QueueFamily, _fam2: &QueueFamily) -> Ordering {
+    // Right now, we only intend to do graphics and compute, on a single queue,
+    // without sparse binding magic, so any graphics- and compute-capable queue
+    // family is the same by our standards.
+    Ordering::Equal
+}
+
+
+// === VULKANO EXAMPLES ===
 
 // Try reading from and writing to vulkano's simplest buffer type
 fn test_buffer_read_write(device: &Arc<Device>) -> Result<()> {
@@ -619,7 +631,7 @@ fn main() -> Result<()> {
     // This is a Vulkan test program
     println!("Hello and welcome to this Vulkan test program!");
 
-    // Create our Vulkan instance
+    // Set up our Vulkan instance
     println!("* Setting up Vulkan instance...");
     env_logger::init();
     let easy_vulkano = EasyVulkano::new(
@@ -628,49 +640,27 @@ fn main() -> Result<()> {
         &["VK_LAYER_LUNARG_standard_validation"]
     )?;
 
-    // Decide which device features and extensions we want to use
+    // Select which physical device we are going to use
+    println!("* Selecting physical device...");
     let features = Features {
         robust_buffer_access: true,
         .. Features::none()
     };
     let extensions = DeviceExtensions::none();
-
-    // Select our physical device accordingly
-    println!("* Selecting physical device and queue family...");
     let phys_device = easy_vulkano.select_physical_device(
         |dev| device_filter(dev, &features, &extensions),
         device_preference
     )?.ok_or(failure::err_msg("No suitable physical device found"))?;
 
-    // Find a family of graphics + compute queues
-    //
-    // Right now, we only intend to do graphics and compute, on a single queue,
-    // without sparse binding magic, so any graphics- and compute-capable queue
-    // family is the same by our standards. We take the first queue we find,
-    // assuming the GPU driver developer picked the queue family order wisely.
-    // We can assume that there will be such a queue because we checked for it
-    // in our device filter.
-    //
-    let graphics_and_compute_family =
-        phys_device.queue_families()
-                   .find(|q| q.supports_graphics() && q.supports_compute())
-                   .ok_or(failure::err_msg("Device selection failed us! :-/"))?;
-
-    // Create our logical device
+    // Set up our logical device and command queue
     println!("* Setting up logical device and queue...");
-    let (device, mut queues_iter) = Device::new(
+    let (device, queue) = easy_vulkano.setup_single_queue_device(
         phys_device,
         &features,
         &extensions,
-        [(graphics_and_compute_family, 1.0)].iter().cloned()
-    )?;
-
-    // As we only use one queue at the moment, we can use a logical shortcut
-    let queue =
-        queues_iter.next()
-                   .ok_or(failure::err_msg("Queue creation failed us! :-/"))?;
-    ensure!(queues_iter.next().is_none(),
-            failure::err_msg("This code assumes there is only one queue"));
+        queue_filter,
+        queue_preference
+    )?.expect("Our physical device filter should ensure success here");
 
     // Let's play a bit with vulkano's buffer abstraction
     println!("* Manipulating a CPU-accessible buffer...");
