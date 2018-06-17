@@ -13,6 +13,7 @@ use vulkano::{
     buffer::{
         BufferUsage,
         CpuAccessibleBuffer,
+        ImmutableBuffer,
     },
     command_buffer::{
         AutoCommandBufferBuilder,
@@ -56,12 +57,13 @@ pub(crate) fn triangle(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     let vertices = [vertex1, vertex2, vertex3];
 
     // Let's store them in a buffer
-    let vx_buf = CpuAccessibleBuffer::from_iter(device.clone(),
-                                                BufferUsage {
-                                                    vertex_buffer: true,
-                                                    .. BufferUsage::none()
-                                                },
-                                                vertices.iter().cloned())?;
+    let (vx_buf, vx_future) =
+        ImmutableBuffer::from_iter(vertices.iter().cloned(),
+                                   BufferUsage {
+                                       vertex_buffer: true,
+                                       .. BufferUsage::none()
+                                   },
+                                   queue.clone())?;
 
     // We will process them using the following vertex shader...
     #[allow(unused)]
@@ -195,7 +197,7 @@ void main() {
                                  .build()?;
 
     // The rest is business as usual: run the computation...
-    command_buffer.execute(queue.clone())?
+    command_buffer.execute_after(vx_future, queue.clone())?
                   .then_signal_fence_and_flush()?
                   .wait(None)?;
 

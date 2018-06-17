@@ -29,7 +29,9 @@ use vulkano::{
     },
     image::{
         Dimensions,
+        ImageLayout,
         ImageUsage,
+        ImmutableImage,
         StorageImage,
     },
     pipeline::ComputePipeline,
@@ -41,17 +43,19 @@ use vulkano::{
 pub(crate) fn basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Create an image
     let (image, init) =
-        StorageImage::uninitialized(device.clone(),
-                                    Dimensions::Dim2d { width: 1024,
-                                                        height: 1024 },
-                                    Format::R8G8B8A8Unorm,
-                                    ImageUsage {
-                                       transfer_source: true,
-                                       transfer_destination: true,
-                                       storage: true,
-                                       .. ImageUsage::none()
-                                    },
-                                    Some(queue.family()))?;
+        ImmutableImage::uninitialized(device.clone(),
+                                      Dimensions::Dim2d { width: 1024,
+                                                          height: 1024 },
+                                      Format::R8G8B8A8Unorm,
+                                      1,
+                                      ImageUsage {
+                                         transfer_source: true,
+                                         transfer_destination: true,
+                                         storage: true,
+                                         .. ImageUsage::none()
+                                      },
+                                      ImageLayout::TransferSrcOptimal,
+                                      Some(queue.family()))?;
 
     // Create a buffer to copy the final image contents in
     let buf =
@@ -90,7 +94,7 @@ pub(crate) fn basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     Ok(image.save("deep_purple.png")?)
 }
 
-// And now, let's comput an image using a compute shader
+// And now, let's compute an image using a compute shader
 pub(crate) fn compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // This is the image which we will eventually write into
     let (image, init) =
@@ -115,9 +119,8 @@ pub(crate) fn compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
                                  )?
                                  .build()?;
 
-    // Start running the clear command
-    let clear_finished =
-        command_buffer.execute(queue.clone())?;
+    // Schedule the clear command
+    let clear_finished = command_buffer.execute(queue.clone())?;
 
     // We will generate this image using the following compute shader
     #[allow(unused)]
