@@ -2,10 +2,7 @@ use easy_vulkano::Result;
 
 use failure;
 
-use image::{
-    ImageBuffer,
-    Rgba,
-};
+use image::{ImageBuffer, Rgba};
 
 use std::sync::Arc;
 
