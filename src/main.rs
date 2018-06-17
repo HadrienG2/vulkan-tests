@@ -83,7 +83,11 @@ use vulkano::{
 // TODO: Review device selection in light of new program requirements
 // TODO: Split this code up in multiple modules
 
-// Create an instance of a Vulkan context, with optional debug printout
+/// Create an instance of a Vulkan context
+///
+/// This is basically a thin wrapper around vulkano's Instance::new() which
+/// optionally logs extra diagnosis information about the host.
+///
 fn create_instance(application_info: Option<&ApplicationInfo>,
                    extensions: &InstanceExtensions,
                    layers: &[&str]) -> Result<Arc<Instance>, Error> {
