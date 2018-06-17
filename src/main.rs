@@ -75,7 +75,6 @@ use vulkano::{
 
 // === GENERAL-PURPOSE LOGIC (+ DEBUG PRINTOUT) ===
 
-// TODO: Manage errors more carefully
 // TODO: Review device selection in light of new program requirements
 // TODO: Split this code up in multiple modules
 
