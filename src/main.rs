@@ -494,56 +494,52 @@ fn device_preference(dev1: PhysicalDevice, dev2: PhysicalDevice) -> Ordering {
 }
 
 // Try reading from and writing to vulkano's simplest buffer type
-fn test_buffer_read_write(device: &Arc<Device>) {
+fn test_buffer_read_write(device: &Arc<Device>) -> Result<()> {
     // This is a basic buffer type that can contain anything
     let buffer = CpuAccessibleBuffer::from_data(device.clone(),
                                                 BufferUsage::all(),
-                                                42usize)
-                                     .expect("Failed to create buffer");
+                                                42usize)?;
 
     // We can access it with RWLock-like semantics
-    let mut writer = buffer.write().expect("Buffer should be unlocked");
-    assert_eq!(*writer, 42usize);
+    let mut writer = buffer.write()?;
+    ensure!(*writer == 42, failure::err_msg("Initial buffer value is wrong"));
     *writer = 43;
     mem::drop(writer);
-    let reader = buffer.read().expect("Buffer should be unlocked");
-    assert_eq!(*reader, 43);
+    let reader = buffer.read()?;
+    ensure!(*reader == 43, failure::err_msg("Final buffer value is wrong"));
+    Ok(())
 }
 
 // Try it again, but this time make the GPU perform the memory copy
-fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_buffer_copy(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Build a source and destination buffer
     let source = CpuAccessibleBuffer::from_iter(device.clone(),
                                                 BufferUsage::transfer_source(),
-                                                1..42)
-                                     .expect("Failed to create source buffer");
+                                                1..42)?;
     let dest =
         CpuAccessibleBuffer::from_iter(device.clone(),
                                        BufferUsage::transfer_destination(),
-                                       (1..42).map(|_| 0))
-                            .expect("Failed to create destination buffer");
+                                       (1..42).map(|_| 0))?;
 
     // Tell the GPU to eagerly copy from the source to the destination
     let command_buffer =
-        AutoCommandBufferBuilder::new(device.clone(), queue.family())
-                                 .expect("Failed to start a command buffer")
-                                 .copy_buffer(source.clone(), dest.clone())
-                                 .expect("Failed to enqueue a buffer copy")
-                                 .build()
-                                 .expect("Failed to build the command buffer");
-    let future = command_buffer.execute(queue.clone())
-                               .expect("Failed to submit command to driver");
-    future.then_signal_fence_and_flush().expect("Failed to flush the future")
-          .wait(None).expect("Failed to await the copy");
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())?
+                                 .copy_buffer(source.clone(), dest.clone())?
+                                 .build()?;
+    let future = command_buffer.execute(queue.clone())?;
+    future.then_signal_fence_and_flush()?
+          .wait(None)?;
 
     // Check that the copy was performed correctly
-    let source_data = source.read().expect("Source buffer should be unlocked");
-    let dest_data = dest.read().expect("Dest buffer should be unlocked");
-    assert_eq!(*source_data, *dest_data, "Source and dest should now be equal");
+    let source_data = source.read()?;
+    let dest_data = dest.read()?;
+    ensure!(*source_data == *dest_data,
+            failure::err_msg("Buffer copy failed (dest != source)"));
+    Ok(())
 }
 
 // Do a computation on a buffer using a compute pipeline
-fn test_buffer_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_buffer_compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Here is some data
     let data_buffer =
         CpuAccessibleBuffer::from_iter(device.clone(),
@@ -551,8 +547,7 @@ fn test_buffer_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
                                            storage_buffer: true,
                                            .. BufferUsage::none()
                                        },
-                                       0..65536)
-                            .expect("Failed to create buffer");
+                                       0..65536)?;
 
     // We will process this data using the following compute shader
     #[allow(unused)]
@@ -577,54 +572,46 @@ void main() {
     }
 
     // Load the shader into the Vulkan implementation
-    let shader = cs::Shader::load(device.clone())
-                            .expect("Failed to load shader module");
+    let shader = cs::Shader::load(device.clone())?;
 
     // Set up a compute pipeline containing that shader
     let pipeline =
         Arc::new(ComputePipeline::new(device.clone(),
                                       &shader.main_entry_point(),
-                                      &())
-                                 .expect("Failed to create compute pipeline"));
+                                      &())?);
 
     // Build a descriptor set to attach that pipeline to our buffer
     let descriptor_set = Arc::new(
         PersistentDescriptorSet::start(pipeline.clone(), 0)
-                                .add_buffer(data_buffer.clone())
-                                .expect("Failed to add buffer to descriptors")
-                                .build()
-                                .expect("Failed to build descriptor set")
+                                .add_buffer(data_buffer.clone())?
+                                .build()?
     );
 
     // Build a command buffer that runs the computation
     let command_buffer =
-        AutoCommandBufferBuilder::new(device.clone(), queue.family())
-                                 .expect("Failed to start a command buffer")
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())?
                                  .dispatch([1024, 1, 1],
                                            pipeline.clone(),
                                            descriptor_set.clone(),
-                                           ())
-                                 .expect("Failed to add dispatch command")
-                                 .build()
-                                 .expect("Failed to build command buffer");
+                                           ())?
+                                 .build()?;
 
     // Schedule the computation and wait for it
-    command_buffer.execute(queue.clone())
-                  .expect("Failed to submit command buffer to driver")
-                  .then_signal_fence_and_flush()
-                  .expect("Failed to flush the future")
-                  .wait(None)
-                  .expect("Failed to await the computation");
+    command_buffer.execute(queue.clone())?
+                  .then_signal_fence_and_flush()?
+                  .wait(None)?;
 
     // Check that it worked
-    let content = data_buffer.read().expect("Failed to access buffer");
+    let content = data_buffer.read()?;
     for (n, val) in content.iter().enumerate() {
-        assert_eq!(*val, (n as u32) * 42);
+        ensure!(*val == (n as u32) * 42,
+                failure::err_msg("Final buffer content is wrong"));
     }
+    Ok(())
 }
 
 // Let's perform some basic operations with an image
-fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Create an image
     let (image, init) =
         StorageImage::uninitialized(device.clone(),
@@ -637,54 +624,47 @@ fn test_image_basics(device: &Arc<Device>, queue: &Arc<Queue>) {
                                        storage: true,
                                        .. ImageUsage::none()
                                     },
-                                    Some(queue.family()))
-                     .expect("Failed to create image");
+                                    Some(queue.family()))?;
 
     // Create a buffer to copy the final image contents in
-    let buf = CpuAccessibleBuffer::from_iter(device.clone(),
-                                             BufferUsage {
-                                                transfer_destination: true,
-                                                .. BufferUsage::none()
-                                             },
-                                             (0 .. 1024 * 1024 *4).map(|_| 0u8))
-                                  .expect("Failed to create dest buffer");
+    let buf =
+        CpuAccessibleBuffer::from_iter(device.clone(),
+                                       BufferUsage {
+                                          transfer_destination: true,
+                                          .. BufferUsage::none()
+                                       },
+                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
 
     // Ask the GPU to fill the image with purple
     let command_buffer =
-        AutoCommandBufferBuilder::new(device.clone(), queue.family())
-                                 .expect("Failed to start a command buffer")
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())?
                                  .clear_color_image(
                                     init,
                                     ClearValue::Float([0.5, 0.0, 0.5, 1.0])
-                                 )
-                                 .expect("Failed to add clear command")
+                                 )?
                                  .copy_image_to_buffer(image.clone(),
-                                                       buf.clone())
-                                 .expect("Failed to add copy command")
-                                 .build()
-                                 .expect("Failed to build command buffer");
+                                                       buf.clone())?
+                                 .build()?;
 
     // Execute and await the command buffer
-    command_buffer.execute(queue.clone())
-                  .expect("Failed to submit the command buffer")
-                  .then_signal_fence_and_flush()
-                  .expect("Failed to flush the future")
-                  .wait(None)
-                  .expect("Failed to await the computation");
+    command_buffer.execute(queue.clone())?
+                  .then_signal_fence_and_flush()?
+                  .wait(None)?;
 
     // Extract the image data from the buffer where it's been copied
-    let buf_content = buf.read().expect("Failed to read buffer");
-    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                                     1024,
-                                                     &buf_content[..])
-                                           .expect("Failed to decode image");
+    let buf_content = buf.read()?;
+    let image =
+        ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
+                                             1024,
+                                             &buf_content[..])
+                    .ok_or(failure::err_msg("Container is not big enough"))?;
 
     // Save the image to a PNG file
-    image.save("deep_purple.png").expect("Failed to save image");
+    Ok(image.save("deep_purple.png")?)
 }
 
 // And now, let's comput an image using a compute shader
-fn test_image_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_image_compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // This is the image which we will eventually write into
     let (image, init) =
         StorageImage::uninitialized(device.clone(),
@@ -697,25 +677,20 @@ fn test_image_compute(device: &Arc<Device>, queue: &Arc<Queue>) {
                                        storage: true,
                                        .. ImageUsage::none()
                                     },
-                                    Some(queue.family()))
-                     .expect("Failed to create image");
+                                    Some(queue.family()))?;
 
     // Build a command buffer that clears the image
     let command_buffer =
-        AutoCommandBufferBuilder::new(device.clone(), queue.family())
-                                 .expect("Failed to start a command buffer")
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())?
                                  .clear_color_image(
                                     init,
                                     ClearValue::Float([0.0, 0.0, 0.0, 1.0])
-                                 )
-                                 .expect("Failed to add clear command")
-                                 .build()
-                                 .expect("Failed to build command buffer");
+                                 )?
+                                 .build()?;
 
     // Start running the clear command
     let clear_finished =
-        command_buffer.execute(queue.clone())
-                      .expect("Failed to submit command buffer to driver");
+        command_buffer.execute(queue.clone())?;
 
     // We will generate this image using the following compute shader
     #[allow(unused)]
@@ -754,70 +729,60 @@ void main() {
     }
 
     // Load the shader into the Vulkan implementation
-    let shader = cs::Shader::load(device.clone())
-                            .expect("Failed to load shader module");
+    let shader = cs::Shader::load(device.clone())?;
 
     // Set up a compute pipeline containing that shader
     let pipeline =
         Arc::new(ComputePipeline::new(device.clone(),
                                       &shader.main_entry_point(),
-                                      &())
-                                 .expect("Failed to create compute pipeline"));
+                                      &())?);
 
     // Build a descriptor set to attach that pipeline to our buffer
     let descriptor_set = Arc::new(
         PersistentDescriptorSet::start(pipeline.clone(), 0)
-                                .add_image(image.clone())
-                                .expect("Failed to add image to descriptors")
-                                .build()
-                                .expect("Failed to build descriptor set")
+                                .add_image(image.clone())?
+                                .build()?
     );
 
     // Create a buffer to copy the final image contents in
-    let buf = CpuAccessibleBuffer::from_iter(device.clone(),
-                                             BufferUsage {
-                                                transfer_destination: true,
-                                                .. BufferUsage::none()
-                                             },
-                                             (0 .. 1024 * 1024 *4).map(|_| 0u8))
-                                  .expect("Failed to create dest buffer");
+    let buf =
+        CpuAccessibleBuffer::from_iter(device.clone(),
+                                       BufferUsage {
+                                          transfer_destination: true,
+                                          .. BufferUsage::none()
+                                       },
+                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
 
     // Build a command buffer that runs the computation
     let command_buffer =
-        AutoCommandBufferBuilder::new(device.clone(), queue.family())
-                                 .expect("Failed to start a command buffer")
+        AutoCommandBufferBuilder::new(device.clone(), queue.family())?
                                  .dispatch([1024 / 8, 1024 / 8, 1],
                                            pipeline.clone(),
                                            descriptor_set.clone(),
-                                           ())
-                                 .expect("Failed to add dispatch command")
+                                           ())?
                                  .copy_image_to_buffer(image.clone(),
-                                                       buf.clone())
-                                 .expect("Failed to add image copy")
-                                 .build()
-                                 .expect("Failed to build command buffer");
+                                                       buf.clone())?
+                                 .build()?;
 
     // Schedule the computation and wait for it
-    command_buffer.execute_after(clear_finished, queue.clone())
-                  .expect("Failed to submit command buffer to driver")
-                  .then_signal_fence_and_flush()
-                  .expect("Failed to flush the future")
-                  .wait(None)
-                  .expect("Failed to await the computation");
+    command_buffer.execute_after(clear_finished, queue.clone())?
+                  .then_signal_fence_and_flush()?
+                  .wait(None)?;
 
     // Extract the image data from the buffer where it's been copied
-    let buf_content = buf.read().expect("Failed to read buffer");
-    let image = ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                                     1024,
-                                                     &buf_content[..])
-                                           .expect("Failed to decode image");
+    let buf_content = buf.read()?;
+    let image =
+        ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
+                                             1024,
+                                             &buf_content[..])
+                    .ok_or(failure::err_msg("Container is not big enough"))?;
 
     // Save the image to a PNG file
-    image.save("mandelbrot.png").expect("Failed to save image");
+    Ok(image.save("mandelbrot.png")?)
 }
 
 // Draw a triangle. How hard could that get?
-fn test_triangle(device: &Arc<Device>, queue: &Arc<Queue>) {
+fn test_triangle(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Our triangle vertices will be described by this struct
     #[derive(Copy, Clone)]
     struct Vertex {
@@ -837,8 +802,7 @@ fn test_triangle(device: &Arc<Device>, queue: &Arc<Queue>) {
                                                     vertex_buffer: true,
                                                     .. BufferUsage::none()
                                                 },
-                                                vertices.iter().cloned())
-                                     .expect("Failed to create buffer");
+                                                vertices.iter().cloned())?;
 
     // We will process them using the following vertex shader...
     #[allow(unused)]
@@ -856,8 +820,7 @@ void main() {
         "]
         struct Dummy;
     }
-    let vs = vs::Shader::load(device.clone())
-                        .expect("Failed to create vertex shader module");
+    let vs = vs::Shader::load(device.clone())?;
 
     // ...and the following fragment shader
     #[allow(unused)]
@@ -875,8 +838,7 @@ void main() {
         "]
         struct Dummy;
     }
-    let fs = fs::Shader::load(device.clone())
-                        .expect("Failed to create fragment shader module");
+    let fs = fs::Shader::load(device.clone())?;
 
     // Vulkan wants to know more about our rendering intents, via a "renderpass"
     let render_pass = Arc::new(
@@ -894,7 +856,7 @@ void main() {
                 color: [color],
                 depth_stencil: {}
             }
-        ).expect("Failed to create renderpass")
+        )?
     );
 
 
@@ -910,11 +872,12 @@ void main() {
                          // - This is our fragment shader
                          .fragment_shader(fs.main_entry_point(), ())
                          // - The pipeline is used in this render pass
-                         .render_pass(Subpass::from(render_pass.clone(), 0)
-                                              .expect("Failed to set subpass"))
+                         .render_pass(
+                            Subpass::from(render_pass.clone(), 0)
+                                    .ok_or(failure::err_msg("No such subpass"))?
+                         )
                          // - Here is the target device, now build the pipeline!
-                         .build(device.clone())
-                         .expect("Failed to build graphics pipeline")
+                         .build(device.clone())?
     );
 
     // This is the image which we will eventually write into
@@ -926,25 +889,22 @@ void main() {
                                        transfer_source: true,
                                        color_attachment: true,
                                        .. ImageUsage::none()
-                                    })
-                        .expect("Failed to create image");
+                                    })?;
 
     // Create a buffer to copy the final image contents in
-    let buf = CpuAccessibleBuffer::from_iter(device.clone(),
-                                             BufferUsage {
-                                                transfer_destination: true,
-                                                .. BufferUsage::none()
-                                             },
-                                             (0 .. 1024 * 1024 *4).map(|_| 0u8))
-                                  .expect("Failed to create dest buffer");
+    let buf =
+        CpuAccessibleBuffer::from_iter(device.clone(),
+                                       BufferUsage {
+                                          transfer_destination: true,
+                                          .. BufferUsage::none()
+                                       },
+                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
 
     // A renderpass must be attached to its drawing target(s) via a framebuffer
     let framebuffer = Arc::new(
         Framebuffer::start(render_pass.clone())
-                    .add(image.clone())
-                    .expect("Failed to add an image to the framebuffer")
-                    .build()
-                    .expect("Failed to build the framebuffer")
+                    .add(image.clone())?
+                    .build()?
     );
 
     // And now, all we need is a viewport...
@@ -961,42 +921,32 @@ void main() {
     let clear_values = vec![[0.0, 0.2, 0.8, 1.0].into()];
     let command_buffer =
         AutoCommandBufferBuilder::primary_one_time_submit(device.clone(),
-                                                          queue.family())
-                                 .expect("Failed to start command buffer")
+                                                          queue.family())?
                                  .begin_render_pass(framebuffer.clone(),
                                                     false,
-                                                    clear_values)
-                                 .expect("Failed to start renderpass")
+                                                    clear_values)?
                                  .draw(pipeline.clone(),
                                        dynamic_state,
                                        vx_buf.clone(),
                                        (),
-                                       ())
-                                 .expect("Failed to build draw call")
-                                 .end_render_pass()
-                                 .expect("Failed to exit renderpass")
+                                       ())?
+                                 .end_render_pass()?
                                  .copy_image_to_buffer(image.clone(),
-                                                       buf.clone())
-                                 .expect("Failed to final copy")
-                                 .build()
-                                 .expect("Failed to build command buffer");
+                                                       buf.clone())?
+                                 .build()?;
 
     // The rest is business as usual: run the computation...
-    command_buffer.execute(queue.clone())
-                  .expect("Failed to submit commands")
-                  .then_signal_fence_and_flush()
-                  .expect("Failed to set up a fence")
-                  .wait(None)
-                  .expect("Failed to await work completion");
+    command_buffer.execute(queue.clone())?
+                  .then_signal_fence_and_flush()?
+                  .wait(None)?;
 
     // ...and save it to disk. Phew!
-    let content = buf.read().unwrap();
-    ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                         1024,
-                                         &content[..])
-                .expect("Failed to decode image")
-                .save("mighty_triangle.png")
-                .expect("Failed to save image to disk");
+    let content = buf.read()?;
+    Ok(ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
+                                            1024,
+                                            &content[..])
+                   .ok_or(failure::err_msg("Container is not big enough"))?
+                   .save("mighty_triangle.png")?)
 }
 
 // Application entry point
@@ -1049,7 +999,7 @@ fn main() -> Result<()> {
     let graphics_and_compute_family =
         phys_device.queue_families()
                    .find(|q| q.supports_graphics() && q.supports_compute())
-                   .expect("This error should be handled by the device filter");
+                   .ok_or(failure::err_msg("Device selection failed us! :-/"))?;
 
     // Create our logical device
     println!("* Setting up logical device and queue...");
@@ -1061,25 +1011,27 @@ fn main() -> Result<()> {
     )?;
 
     // As we only use one queue at the moment, we can use a logical shortcut
-    let queue = queues_iter.next().expect("Vulkan failed to provide a queue");
-    assert!(queues_iter.next().is_none(),
-            "This code must be updated, it assumes there is only one queue");
+    let queue =
+        queues_iter.next()
+                   .ok_or(failure::err_msg("Queue creation failed us! :-/"))?;
+    ensure!(queues_iter.next().is_none(),
+            failure::err_msg("This code assumes there is only one queue"));
 
     // Let's play a bit with vulkano's buffer abstraction
     println!("* Playing with command buffers...");
-    test_buffer_read_write(&device);
-    test_buffer_copy(&device, &queue);
-    test_buffer_compute(&device, &queue);
+    test_buffer_read_write(&device)?;
+    test_buffer_copy(&device, &queue)?;
+    test_buffer_compute(&device, &queue)?;
 
     // And then let's play with the image abstraction too!
     println!("* Playing with images...");
-    test_image_basics(&device, &queue);
-    test_image_compute(&device, &queue);
+    test_image_basics(&device, &queue)?;
+    test_image_compute(&device, &queue)?;
 
     // Finally, we can achieve the pinnacle of any modern graphics API, namely
     // drawing a colored triangle. Everything goes downhill from there.
     println!("* And finally, drawing a triangle...");
-    test_triangle(&device, &queue);
+    test_triangle(&device, &queue)?;
 
     // ...and then everything will be teared down automagically
     println!("We're done!");
