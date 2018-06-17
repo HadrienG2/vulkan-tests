@@ -176,7 +176,8 @@ impl EasyVulkano {
         let mut favorite_device = None;
         for device in PhysicalDevice::enumerate(&self.instance) {
             // Low-level device and driver information
-            info!("\nDevice #{}: {}", device.index(), device.name());
+            info!("");
+            info!("Device #{}: {}", device.index(), device.name());
             info!("Type: {:?}", device.ty());
             info!("Driver version: {}", device.driver_version());
             info!("PCI vendor/device id: 0x{:x}/0x{:x}",
@@ -520,7 +521,8 @@ impl EasyVulkano {
                 info!("Preferred: {}", is_better);
             }
         }
-        info!("\n---- END OF PHYSICAL DEVICE LIST ----");
+        info!("");
+        info!("---- END OF PHYSICAL DEVICE LIST ----");
 
         // Return our physical device of choice (hopefully there is one)
         Ok(favorite_device)
