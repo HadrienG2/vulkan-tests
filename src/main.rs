@@ -1018,19 +1018,22 @@ fn main() -> Result<()> {
             failure::err_msg("This code assumes there is only one queue"));
 
     // Let's play a bit with vulkano's buffer abstraction
-    println!("* Playing with command buffers...");
+    println!("* Manipulating a CPU-accessible buffer...");
     test_buffer_read_write(&device)?;
+    println!("* Making the GPU copy buffers for us...");
     test_buffer_copy(&device, &queue)?;
+    println!("* Filling up a buffer using a compute shader...");
     test_buffer_compute(&device, &queue)?;
 
     // And then let's play with the image abstraction too!
-    println!("* Playing with images...");
+    println!("* Drawing our first image...");
     test_image_basics(&device, &queue)?;
+    println!("* Drawing a fractal with a compute shader...");
     test_image_compute(&device, &queue)?;
 
     // Finally, we can achieve the pinnacle of any modern graphics API, namely
     // drawing a colored triangle. Everything goes downhill from there.
-    println!("* And finally, drawing a triangle...");
+    println!("* Drawing a triangle with the full graphics pipeline...");
     test_triangle(&device, &queue)?;
 
     // ...and then everything will be teared down automagically
