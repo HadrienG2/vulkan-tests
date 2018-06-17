@@ -435,16 +435,20 @@ impl EasyVulkano {
                   limits.min_storage_buffer_offset_alignment());
             info!("    - Offset ranges:");
             info!("        * Texel fetch: [{}, {}]",
-                  limits.min_texel_offset(), limits.max_texel_offset());
+                  limits.min_texel_offset(),
+                  limits.max_texel_offset());
             info!("        * Texel gather: [{}, {}]",
-                  limits.min_texel_gather_offset(), limits.max_texel_gather_offset());
+                  limits.min_texel_gather_offset(),
+                  limits.max_texel_gather_offset());
             info!("        * Interpolation: [{}, {}]",
-                  limits.min_interpolation_offset(), limits.max_interpolation_offset());
+                  limits.min_interpolation_offset(),
+                  limits.max_interpolation_offset());
             info!("    - Sub-pixel interpolation rounding: {} bits",
                   limits.sub_pixel_interpolation_offset_bits());
             info!("    - Framebuffer limits:");
             info!("        * Max size: [{}, {}]",
-                  limits.max_framebuffer_width(), limits.max_framebuffer_height());
+                  limits.max_framebuffer_width(),
+                  limits.max_framebuffer_height());
             info!("        * Max layers: {}",
                   limits.max_framebuffer_layers());
             info!("        * Supported color sample counts: 0b{:b}",
