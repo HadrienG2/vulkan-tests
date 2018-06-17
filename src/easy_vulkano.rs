@@ -533,6 +533,10 @@ impl EasyVulkano {
     /// a simpler single-queue setup. This method provides you with such a setup
     /// with minimal fuss.
     ///
+    /// Note that if you use select_physical_device() to pick your physical
+    /// device, you may want to integrate your queue filter/preference into
+    /// your device filter/preference.
+    ///
     pub fn setup_single_queue_device(
         &self,
         phys_device: PhysicalDevice,
