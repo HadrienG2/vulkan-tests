@@ -1,9 +1,9 @@
+#[macro_use] extern crate failure;
 #[macro_use] extern crate log;
 #[macro_use] extern crate vulkano;
 #[macro_use] extern crate vulkano_shader_derive;
 
 extern crate env_logger;
-extern crate failure;
 extern crate image;
 
 use failure::Error;
@@ -120,7 +120,7 @@ fn select_physical_device(
     instance: &Arc<Instance>,
     filter: impl Fn(PhysicalDevice) -> bool,
     preference: impl Fn(PhysicalDevice, PhysicalDevice) -> Ordering
-) -> PhysicalDevice {
+) -> Result<PhysicalDevice, Error> {
         // Enumerate the physical devices
     info!("---- BEGINNING OF PHYSICAL DEVICE LIST ----");
     let mut favorite_device = None;
@@ -136,8 +136,7 @@ fn select_physical_device(
             let uuid = device.uuid();
             let mut uuid_str = String::with_capacity(2 * uuid.len());
             for byte in uuid {
-                write!(&mut uuid_str, "{:02x}", byte)
-                     .expect("Failed to write UUID");
+                write!(&mut uuid_str, "{:02x}", byte)?;
             }
             info!("UUID: 0x{}", uuid_str);
         }
@@ -150,7 +149,7 @@ fn select_physical_device(
         // Supported Vulkan features
         let supported_features = device.supported_features();
         info!("{:#?}", supported_features);
-        assert!(supported_features.robust_buffer_access,
+        ensure!(supported_features.robust_buffer_access,
                 "Robust buffer access support is mandated by the Vulkan spec");
 
         // Queue families
@@ -162,23 +161,18 @@ fn select_physical_device(
                 write!(&mut family_str,
                        "    {}: {} queue(s) for ",
                        family.id(),
-                       family.queues_count())
-                     .expect("Failed to write queue family info");
+                       family.queues_count())?;
                 if family.supports_graphics() {
-                    write!(&mut family_str, "graphics, ")
-                         .expect("Failed to write queue family info");
+                    write!(&mut family_str, "graphics, ")?;
                 }
                 if family.supports_compute() {
-                    write!(&mut family_str, "compute, " )
-                         .expect("Failed to write queue family info");
+                    write!(&mut family_str, "compute, " )?;
                 }
                 if family.supports_transfers() {
-                    write!(&mut family_str, "transfers, ")
-                         .expect("Failed to write queue family info");
+                    write!(&mut family_str, "transfers, ")?;
                 }
                 if family.supports_sparse_binding() {
-                    write!(&mut family_str, "sparse resource bindings, ")
-                         .expect("Failed to write queue family info");
+                    write!(&mut family_str, "sparse resource bindings, ")?;
                 }
                 info!("{}", family_str);
             }
@@ -193,33 +187,25 @@ fn select_physical_device(
                 write!(&mut type_str,
                        "    {}: from heap #{}, ",
                        memory_type.id(),
-                       memory_type.heap().id())
-                     .expect("Failed to write memory type info");
+                       memory_type.heap().id())?;
                 if memory_type.is_device_local() {
-                    write!(&mut type_str, "on device, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "on device, ")?;
                 } else {
-                    write!(&mut type_str, "on host, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "on host, ")?;
                 }
                 if memory_type.is_host_visible() {
-                    write!(&mut type_str, "host-visible, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "host-visible, ")?;
                 } else {
-                    write!(&mut type_str, "only accessible by device, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "only accessible by device, ")?;
                 }
                 if memory_type.is_host_coherent() {
-                    write!(&mut type_str, "host-coherent, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "host-coherent, ")?;
                 }
                 if memory_type.is_host_cached() {
-                    write!(&mut type_str, "host-cached, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "host-cached, ")?;
                 }
                 if memory_type.is_lazily_allocated() {
-                    write!(&mut type_str, "lazily allocated, ")
-                         .expect("Failed to write memory type info");
+                    write!(&mut type_str, "lazily allocated, ")?;
                 }
                 info!("{}", type_str);
             }
@@ -234,14 +220,11 @@ fn select_physical_device(
                 write!(&mut heap_str,
                        "    {}: {} bytes, ",
                        heap.id(),
-                       heap.size())
-                     .expect("Failed to write memory heap info");
+                       heap.size())?;
                 if heap.is_device_local() {
-                    write!(&mut heap_str, "on device, ")
-                         .expect("Failed to write memory heap info");
+                    write!(&mut heap_str, "on device, ")?;
                 } else {
-                    write!(&mut heap_str, "on host, ")
-                         .expect("Failed to write memory heap info");
+                    write!(&mut heap_str, "on host, ")?;
                 }
                 info!("{}", heap_str);
             }
@@ -384,7 +367,7 @@ fn select_physical_device(
     info!("\n---- END OF PHYSICAL DEVICE LIST ----");
 
     // Return our physical device of choice (hopefully there is one)
-    favorite_device.expect("No suitable physical device found")
+    favorite_device.ok_or(failure::err_msg("No suitable physical device found"))
 }
 
 // Set up a logical device from a physical device
@@ -1076,7 +1059,7 @@ fn main() -> Result<(), Error> {
         &instance,
         |dev| device_filter(dev, &features, &extensions),
         device_preference
-    );
+    )?;
 
     // Find a family of graphics + compute queues
     //
