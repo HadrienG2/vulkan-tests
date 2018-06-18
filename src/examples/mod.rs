@@ -46,7 +46,16 @@ pub(crate) fn device_filter(dev: PhysicalDevice,
         return false;
     }
 
-    // TODO: May end up looking at device limits and memory heap sizes as well.
+    // We'll make 1024x1024 images
+    let limits = dev.limits();
+    if limits.max_image_dimension_2d() < 1024 {
+        return false;
+    }
+
+    // We'll use buffers of up to 65536 elements as shader outputs
+    if limits.max_storage_buffer_range() < 65536 {
+        return false;
+    }
 
     // If control reaches this point, we can use this device
     true
