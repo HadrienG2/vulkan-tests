@@ -15,8 +15,6 @@ use vulkano::instance::{
 
 // === DEVICE AND QUEUE SELECTION CRITERIA ===
 
-// TODO: Review device selection in light of new program requirements
-
 // Tells whether we can use a certain physical device or not
 pub(crate) fn device_filter(dev: PhysicalDevice,
                             features: &Features,

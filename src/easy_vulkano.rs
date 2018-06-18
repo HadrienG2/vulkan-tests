@@ -135,7 +135,6 @@ impl EasyVulkano {
                     _ => unimplemented!()
                 };
                 log!(log_level,
-                     // TODO: Formatting can be improved
                      "VULKAN{}{}{}{}{} @ {} \t=> {}",
                      if msg.ty.error { " ERRO" } else { "" },
                      if msg.ty.warning { " WARN" } else { "" },
