@@ -1,5 +1,3 @@
-use easy_vulkano::Result;
-
 use failure;
 
 use std::{
@@ -24,6 +22,9 @@ use vulkano::{
     pipeline::ComputePipeline,
     sync::GpuFuture,
 };
+
+use vulkanoob::Result;
+
 
 /// Try reading from and writing to vulkano's simplest buffer type
 pub(crate) fn read_write(device: &Arc<Device>) -> Result<()> {

@@ -1,15 +1,17 @@
 #[macro_use] extern crate failure;
-#[macro_use] extern crate log;
 #[macro_use] extern crate vulkano;
 #[macro_use] extern crate vulkano_shader_derive;
 
 extern crate env_logger;
 extern crate image;
+extern crate vulkanoob;
 
-mod easy_vulkano;
 mod examples;
 
-use easy_vulkano::{EasyVulkano, Result};
+use vulkanoob::{
+    instance::EasyInstance,
+    Result,
+};
 
 use vulkano::instance::{
     DeviceExtensions,
@@ -27,7 +29,7 @@ fn main() -> Result<()> {
     // Set up our Vulkan instance
     println!("* Setting up Vulkan instance...");
     env_logger::init();
-    let easy_vulkano = EasyVulkano::new(
+    let instance = EasyInstance::new(
         Some(&app_info_from_cargo_toml!()),
         &InstanceExtensions::none(),
         &["VK_LAYER_LUNARG_standard_validation"]
@@ -40,15 +42,14 @@ fn main() -> Result<()> {
         .. Features::none()
     };
     let extensions = DeviceExtensions::none();
-    let phys_device = easy_vulkano.select_physical_device(
+    let phys_device = instance.select_physical_device(
         |dev| examples::device_filter(dev, &features, &extensions),
         examples::device_preference
     )?.ok_or(failure::err_msg("No suitable physical device found"))?;
 
     // Set up our logical device and command queue
     println!("* Setting up logical device and queue...");
-    let (device, queue) = easy_vulkano.setup_single_queue_device(
-        phys_device,
+    let (device, queue) = phys_device.setup_single_queue_device(
         &features,
         &extensions,
         examples::queue_filter,

@@ -1,5 +1,3 @@
-use easy_vulkano::Result;
-
 use failure;
 
 use image::{ImageBuffer, Rgba};
@@ -34,6 +32,8 @@ use vulkano::{
     pipeline::ComputePipeline,
     sync::GpuFuture,
 };
+
+use vulkanoob::Result;
 
 
 // Let's perform some basic operations with an image

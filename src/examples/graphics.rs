@@ -1,5 +1,3 @@
-use easy_vulkano::Result;
-
 use failure;
 
 use image::{ImageBuffer, Rgba};
@@ -36,6 +34,8 @@ use vulkano::{
     },
     sync::GpuFuture,
 };
+
+use vulkanoob::Result;
 
 
 /// Let's draw a triangle. How hard could that get?
