@@ -184,7 +184,7 @@ void main() {
                                                     false,
                                                     clear_values)?
                                  .draw(pipeline.clone(),
-                                       dynamic_state,
+                                       &dynamic_state,
                                        vx_buf.clone(),
                                        (),
                                        ())?

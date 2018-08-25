@@ -32,7 +32,7 @@ fn main() -> Result<()> {
     let instance = EasyInstance::new(
         Some(&app_info_from_cargo_toml!()),
         &InstanceExtensions::none(),
-        &["VK_LAYER_LUNARG_standard_validation"]
+        vec!["VK_LAYER_LUNARG_standard_validation"]
     )?;
 
     // Select which physical device we are going to use
