@@ -10,18 +10,24 @@ use vulkano::instance::{
 };
 
 
-// === DEVICE AND QUEUE SELECTION CRITERIA ===
+// Dimensions of the buffers that we will manipulate
+const STORAGE_BUF_SIZE: u32 = 65536;
+
+// Dimensions of the images that we will manipulate
+const IMG_WIDTH: u32 = 1024;
+const IMG_HEIGHT: u32 = 1024;
+const IMG_PIXELS: usize = (IMG_WIDTH as usize) * (IMG_HEIGHT as usize);
 
 // Tells whether we can use a certain physical device or not
 pub(crate) fn device_filter(dev: PhysicalDevice) -> bool {
     // We'll make 1024x1024 images
     let limits = dev.limits();
-    if limits.max_image_dimension_2d() < 1024 {
+    if limits.max_image_dimension_2d() < IMG_WIDTH.max(IMG_HEIGHT) {
         return false;
     }
 
     // We'll use buffers of up to 65536 elements as shader outputs
-    if limits.max_storage_buffer_range() < 65536 {
+    if limits.max_storage_buffer_range() < STORAGE_BUF_SIZE {
         return false;
     }
 

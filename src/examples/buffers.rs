@@ -5,20 +5,13 @@ use std::{
     sync::Arc,
 };
 
+use super::STORAGE_BUF_SIZE;
+
 use vulkano::{
-    buffer::{
-        BufferUsage,
-        CpuAccessibleBuffer,
-    },
-    command_buffer::{
-        AutoCommandBufferBuilder,
-        CommandBuffer,
-    },
+    buffer::{BufferUsage, CpuAccessibleBuffer},
+    command_buffer::{AutoCommandBufferBuilder, CommandBuffer},
     descriptor::descriptor_set::PersistentDescriptorSet,
-    device::{
-        Device,
-        Queue,
-    },
+    device::{Device, Queue},
     pipeline::ComputePipeline,
     sync::GpuFuture,
 };
@@ -83,7 +76,7 @@ pub(crate) fn compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
                                            storage_buffer: true,
                                            .. BufferUsage::none()
                                        },
-                                       0..65536)?;
+                                       0..STORAGE_BUF_SIZE)?;
 
     // We will process this data using the following compute shader
     #[allow(unused)]
@@ -126,7 +119,7 @@ void main() {
     // Build a command buffer that runs the computation
     let command_buffer =
         AutoCommandBufferBuilder::new(device.clone(), queue.family())?
-                                 .dispatch([1024, 1, 1],
+                                 .dispatch([STORAGE_BUF_SIZE/64, 1, 1],
                                            pipeline.clone(),
                                            descriptor_set.clone(),
                                            ())?

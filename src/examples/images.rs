@@ -1,3 +1,5 @@
+use super::{IMG_HEIGHT, IMG_PIXELS, IMG_WIDTH};
+
 use failure;
 
 use image::{ImageBuffer, Rgba};
@@ -5,30 +7,12 @@ use image::{ImageBuffer, Rgba};
 use std::sync::Arc;
 
 use vulkano::{
-    buffer::{
-        BufferUsage,
-        CpuAccessibleBuffer,
-    },
-    command_buffer::{
-        AutoCommandBufferBuilder,
-        CommandBuffer,
-    },
+    buffer::{BufferUsage, CpuAccessibleBuffer},
+    command_buffer::{AutoCommandBufferBuilder, CommandBuffer},
     descriptor::descriptor_set::PersistentDescriptorSet,
-    device::{
-        Device,
-        Queue,
-    },
-    format::{
-        ClearValue,
-        Format,
-    },
-    image::{
-        Dimensions,
-        ImageLayout,
-        ImageUsage,
-        ImmutableImage,
-        StorageImage,
-    },
+    device::{Device, Queue},
+    format::{ClearValue, Format},
+    image::{Dimensions, ImageLayout, ImageUsage, ImmutableImage, StorageImage},
     pipeline::ComputePipeline,
     sync::GpuFuture,
 };
@@ -41,8 +25,8 @@ pub(crate) fn basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Create an image
     let (image, init) =
         ImmutableImage::uninitialized(device.clone(),
-                                      Dimensions::Dim2d { width: 1024,
-                                                          height: 1024 },
+                                      Dimensions::Dim2d { width: IMG_WIDTH,
+                                                          height: IMG_HEIGHT },
                                       Format::R8G8B8A8Unorm,
                                       1,
                                       ImageUsage {
@@ -61,7 +45,7 @@ pub(crate) fn basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
                                           transfer_destination: true,
                                           .. BufferUsage::none()
                                        },
-                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
+                                       (0 .. IMG_PIXELS * 4).map(|_| 0u8))?;
 
     // Ask the GPU to fill the image with purple
     let command_buffer =
@@ -82,8 +66,8 @@ pub(crate) fn basics(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // Extract the image data from the buffer where it's been copied
     let buf_content = buf.read()?;
     let image =
-        ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                             1024,
+        ImageBuffer::<Rgba<u8>, _>::from_raw(IMG_WIDTH,
+                                             IMG_HEIGHT,
                                              &buf_content[..])
                     .ok_or(failure::err_msg("Container is not big enough"))?;
 
@@ -96,8 +80,8 @@ pub(crate) fn compute(device: &Arc<Device>, queue: &Arc<Queue>) -> Result<()> {
     // This is the image which we will eventually write into
     let (image, init) =
         StorageImage::uninitialized(device.clone(),
-                                    Dimensions::Dim2d { width: 1024,
-                                                        height: 1024 },
+                                    Dimensions::Dim2d { width: IMG_WIDTH,
+                                                        height: IMG_HEIGHT },
                                     Format::R8G8B8A8Unorm,
                                     ImageUsage {
                                        transfer_source: true,
@@ -178,12 +162,12 @@ void main() {
                                           transfer_destination: true,
                                           .. BufferUsage::none()
                                        },
-                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
+                                       (0 .. IMG_PIXELS *4).map(|_| 0u8))?;
 
     // Build a command buffer that runs the computation
     let command_buffer =
         AutoCommandBufferBuilder::new(device.clone(), queue.family())?
-                                 .dispatch([1024 / 8, 1024 / 8, 1],
+                                 .dispatch([IMG_WIDTH / 8, IMG_HEIGHT / 8, 1],
                                            pipeline.clone(),
                                            descriptor_set.clone(),
                                            ())?
@@ -199,8 +183,8 @@ void main() {
     // Extract the image data from the buffer where it's been copied
     let buf_content = buf.read()?;
     let image =
-        ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                             1024,
+        ImageBuffer::<Rgba<u8>, _>::from_raw(IMG_WIDTH,
+                                             IMG_HEIGHT,
                                              &buf_content[..])
                     .ok_or(failure::err_msg("Container is not big enough"))?;
 
