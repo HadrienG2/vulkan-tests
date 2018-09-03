@@ -4,30 +4,15 @@ use image::{ImageBuffer, Rgba};
 
 use std::sync::Arc;
 
+use super::{IMG_HEIGHT, IMG_PIXELS, IMG_WIDTH};
+
 use vulkano::{
-    buffer::{
-        BufferUsage,
-        CpuAccessibleBuffer,
-        ImmutableBuffer,
-    },
-    command_buffer::{
-        AutoCommandBufferBuilder,
-        CommandBuffer,
-        DynamicState,
-    },
-    device::{
-        Device,
-        Queue,
-    },
+    buffer::{BufferUsage, CpuAccessibleBuffer, ImmutableBuffer},
+    command_buffer::{AutoCommandBufferBuilder, CommandBuffer, DynamicState},
+    device::{Device, Queue},
     format::Format,
-    framebuffer::{
-        Framebuffer,
-        Subpass,
-    },
-    image::{
-        AttachmentImage,
-        ImageUsage,
-    },
+    framebuffer::{Framebuffer, Subpass},
+    image::{AttachmentImage, ImageUsage},
     pipeline::{
         GraphicsPipeline,
         viewport::Viewport,
@@ -141,7 +126,7 @@ void main() {
     // This is the image which we will eventually write into
     let image =
         AttachmentImage::with_usage(device.clone(),
-                                    [1024, 1024],
+                                    [IMG_WIDTH, IMG_HEIGHT],
                                     Format::R8G8B8A8Unorm,
                                     ImageUsage {
                                        transfer_source: true,
@@ -156,7 +141,7 @@ void main() {
                                           transfer_destination: true,
                                           .. BufferUsage::none()
                                        },
-                                       (0 .. 1024 * 1024 *4).map(|_| 0u8))?;
+                                       (0 .. IMG_PIXELS *4).map(|_| 0u8))?;
 
     // A renderpass must be attached to its drawing target(s) via a framebuffer
     let framebuffer = Arc::new(
@@ -169,7 +154,7 @@ void main() {
     let dynamic_state = DynamicState {
         viewports: Some(vec![Viewport {
             origin: [0.0, 0.0],
-            dimensions: [1024.0, 1024.0],
+            dimensions: [IMG_WIDTH as f32, IMG_HEIGHT as f32],
             depth_range: 0.0 .. 1.0,
         }]),
         .. DynamicState::none()
@@ -200,8 +185,8 @@ void main() {
 
     // ...and save it to disk. Phew!
     let content = buf.read()?;
-    Ok(ImageBuffer::<Rgba<u8>, _>::from_raw(1024,
-                                            1024,
+    Ok(ImageBuffer::<Rgba<u8>, _>::from_raw(IMG_WIDTH,
+                                            IMG_HEIGHT,
                                             &content[..])
                    .ok_or(failure::err_msg("Container is not big enough"))?
                    .save("mighty_triangle.png")?)
