@@ -5,45 +5,15 @@ pub(crate) mod graphics;
 use std::cmp::Ordering;
 
 use vulkano::instance::{
-    DeviceExtensions,
-    Features,
     PhysicalDevice,
     QueueFamily,
-    Version,
 };
 
 
 // === DEVICE AND QUEUE SELECTION CRITERIA ===
 
 // Tells whether we can use a certain physical device or not
-pub(crate) fn device_filter(dev: PhysicalDevice,
-                            features: &Features,
-                            extensions: &DeviceExtensions) -> bool {
-    // This code was written against Vulkan v1.0.76. We tolerate older
-    // patch releases and new minor versions but not new major versions.
-    let min_ver = Version { major: 1, minor: 0, patch: 0 };
-    let max_ver = Version { major: 2, minor: 0, patch: 0 };
-    if (dev.api_version() < min_ver) || (dev.api_version() >= max_ver) {
-        return false;
-    }
-
-    // At least one device queue family should fit our needs
-    if dev.queue_families().find(queue_filter).is_none() {
-        return false;
-    }
-
-    // Some features may be requested by the user, we need to look at them
-    if !dev.supported_features().superset_of(features) {
-        return false;
-    }
-
-    // Same goes for device extensions
-    let unsupported_exts =
-        extensions.difference(&DeviceExtensions::supported_by_device(dev));
-    if unsupported_exts != DeviceExtensions::none() {
-        return false;
-    }
-
+pub(crate) fn device_filter(dev: PhysicalDevice) -> bool {
     // We'll make 1024x1024 images
     let limits = dev.limits();
     if limits.max_image_dimension_2d() < 1024 {

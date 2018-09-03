@@ -42,8 +42,14 @@ fn main() -> Result<()> {
         .. Features::none()
     };
     let extensions = DeviceExtensions::none();
+    let device_filter = vulkanoob::easy_device_filter(
+        &features,
+        &extensions,
+        examples::queue_filter,
+        examples::device_filter
+    );
     let phys_device = instance.select_physical_device(
-        |dev| examples::device_filter(dev, &features, &extensions),
+        device_filter,
         examples::device_preference
     )?.ok_or(failure::err_msg("No suitable physical device found"))?;
 

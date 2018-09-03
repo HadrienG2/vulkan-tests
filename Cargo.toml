@@ -5,7 +5,7 @@ authors = ["Hadrien G. <knights_of_ni@gmx.com>"]
 
 [dependencies]
 env_logger = "0.5"
-failure = "0.1.1"
+failure = "0.1"
 vulkano = { git="https://github.com/HadrienG2/vulkano.git", branch="storage-image-init" }
 vulkano-shader-derive = "0.10"
 vulkanoob = { git="https://github.com/HadrienG2/vulkanoob.git" }
